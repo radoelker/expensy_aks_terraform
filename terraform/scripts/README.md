@@ -13,7 +13,21 @@ CONTAINER_NAME="tfstate"
 STORAGE_ACCOUNT_NAME= < randomly build > # less than 3-24 characters, must be unique
 ```
 
-
+In case the subscription is new, the script will install required providers such as:
+```
+Microsoft.Storage
+Microsoft.Network
+Microsoft.Compute
+Microsoft.ContainerService
+Microsoft.ManagedIdentity
+Microsoft.OperationalInsights
+```
+You may check the registred providers by the following command:
+```
+az provider list   \
+   --query "[?registrationState=='Registered'].namespace" \
+   -o table
+```
 
 Creating storage account: akstfstate37ec108a
 
@@ -56,3 +70,6 @@ az role assignment create --role 'Storage Blob Data Contributor' \
   --output none
 ```
 
+## Troubleshooting
+
+In case one of the commands makes trouble remove the `--output none` at first, if the result is not providing more details, add `--debug` instead. This is very verbose but helpful at the same time.

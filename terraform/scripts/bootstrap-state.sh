@@ -100,8 +100,8 @@ az storage account create \
   --min-tls-version TLS1_2 \
   --allow-blob-public-access false \
   --tags "managed-by=terraform" "purpose=tf-state" \
-  --debug
-#  --output none
+#  --debug
+  --output none
 
 # ── Enable versioning for state file protection ─────────────────────────────
 info "Enabling blob versioning..."

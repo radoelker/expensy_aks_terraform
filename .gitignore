@@ -1,0 +1,33 @@
+# Terraform
+terraform/.terraform/
+terraform/*.tfstate
+terraform/*.tfstate.backup
+terraform/.terraform.lock.hcl
+terraform/terraform.tfvars
+terraform/backend.conf
+
+
+# Node
+expensy_backend/node_modules/
+expensy_backend/dist
+expensy_backend/build/
+expensy_backend/.env
+expensy_backend/.env.local
+expensy_backend/.env.*.local
+expensy_backend/npm-debug.log*
+expensy_backend/.vscode/
+
+# Next.js
+expensy_frontend/.next/
+expensy_frontend/out/
+expensy_frontend/.vscode/
+expensy_frontend/dist/
+expensy_frontend/build/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Secrets — never commit these
+*.pem
+*.key

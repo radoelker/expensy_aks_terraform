@@ -1,0 +1,25 @@
+name: Expensy CI/CD Pipelines - IaC Terraform
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+
+    # ============================================================
+    # Checkov Security Scan
+    # ============================================================
+    - name: Checkov - Terraform scan
+      uses: bridgecrewio/checkov-action@master
+      with:
+        directory: terraform/
+        framework: terraform
+        soft_fail: true

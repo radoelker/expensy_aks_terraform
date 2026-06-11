@@ -84,3 +84,23 @@ output "resource_group_id" {
   description = "Resource group ID for the AKS cluster"
   value       = azurerm_resource_group.cluster.id
 }
+
+output "disk_encryption_set_id" {
+  description = "Resource ID of the Disk Encryption Set — pass to AKS as disk_encryption_set_id."
+  value       = module.des.disk_encryption_set_id
+}
+
+output "disk_encryption_set_name" {
+  description = "Name of the Disk Encryption Set."
+  value       = module.des.disk_encryption_set_name
+}
+
+output "key_vault_key_id" {
+  description = "Resource ID of the Key Vault key."
+  value       = module.des.key_vault_key_id
+}
+
+output "principal_id" {
+  description = "Principal ID of the Disk Encryption Set managed identity — useful for additional RBAC assignments."
+  value       = module.des.principal_id
+}

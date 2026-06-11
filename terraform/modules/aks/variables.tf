@@ -42,3 +42,8 @@ variable "tags" {
   default = {
   }
 }
+
+variable "disk_encryption_set_id" {
+  description = "Resource ID of the Disk Encryption Set — pass to AKS as disk_encryption_set_id."
+  type          = string
+}

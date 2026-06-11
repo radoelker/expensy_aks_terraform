@@ -33,6 +33,10 @@ resource "azurerm_role_assignment" "user_subnet_network_contributor" {
 
 
 # ── AKS Managed Cluster ───────────────────────────────────────────────────────
+#checkov:skip=CKV_AZURE_6:API server access is restricted via VNet Integration and subnet delegation instead of IP ranges
+#checkov:done=CKV_AZURE_117: Ensure that AKS uses disk encryption set
+#checkov:done=CKV_AZURE_227: Enable_host_encryption for node pools
+
 resource "azurerm_kubernetes_cluster" "main" {
   name                = var.managed_cluster_name
   location            = var.location
@@ -43,8 +47,12 @@ resource "azurerm_kubernetes_cluster" "main" {
   tags = var.tags
   sku_tier     = "Free"
   support_plan = "KubernetesOfficial"
+  disk_encryption_set_id = var.disk_encryption_set_id
 
   # ── API Server VNet Integration ──────────────────────────────────────────
+  # [CKV_AZURE_6]
+  # Do NOT set api_server_authorized_ip_ranges — Azure will error
+  # Access is controlled by your VNet/NSG instead
   api_server_access_profile {
     subnet_id                = var.apiserver_subnet_id  
     virtual_network_integration_enabled = true 
@@ -69,6 +77,12 @@ resource "azurerm_kubernetes_cluster" "main" {
     name                 = "systempool"
     vnet_subnet_id       = var.system_subnet_id  
     vm_size              = "Standard_D4pds_v6"   # ARM64 Ampere Altra
+    #[CKV_AZURE_227] prerequisites:
+    #  az vm list-skus --location westus3 --query "[?name=='Standard_D4pds_v6'].capabilities" -o table
+    #  az feature show --namespace Microsoft.Compute --name EncryptionAtHost
+    #  az feature register --namespace Microsoft.Compute --name EncryptionAtHost
+    #  enable_host_encryption renamed to host_encryption_enabled in v4.x
+    host_encryption_enabled  = true
     node_count           = 2
     min_count            = 2
     max_count            = 5
@@ -189,6 +203,12 @@ resource "azurerm_kubernetes_cluster_node_pool" "user" {
   kubernetes_cluster_id = azurerm_kubernetes_cluster.main.id
   vnet_subnet_id        = var.user_subnet_id 
   vm_size               = "Standard_D4pds_v6"
+  #[CKV_AZURE_227] prerequisites:
+  #  az vm list-skus --location westus3 --query "[?name=='Standard_D4pds_v6'].capabilities" -o table
+  #  az feature show --namespace Microsoft.Compute --name EncryptionAtHost
+  #  az feature register --namespace Microsoft.Compute --name EncryptionAtHost
+  #  enable_host_encryption renamed to host_encryption_enabled in v4.x of the AzureRM provider
+  host_encryption_enabled  = true
   node_count            = 1
   min_count             = 1
   max_count             = 10

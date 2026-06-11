@@ -32,8 +32,13 @@ module "keyvault" {
     {
       module = "keyvault"
     },
-    var.tags   
+    var.tags
   )
+}
+
+data "azurerm_key_vault" "existing" {
+  name                = local.kv_name
+  resource_group_name = azurerm_resource_group.keyvault.name
 }
 
 # ── Vnet Module ─────────────────────────────────────────────────────────────────
@@ -45,7 +50,7 @@ module "vnet" {
     {
       module = "vnet"
     },
-    var.tags   
+    var.tags
   )
 
   vnet_name           = "vnet-aks-prod"
@@ -82,6 +87,21 @@ module "vnet" {
 }
 
 
+module "des" {
+  source              = "./modules/des"
+  key_vault_id        = data.azurerm_key_vault.existing.id
+  resource_group_name = var.resource_group_name
+  location            = var.location
+  tags = merge(
+    {
+      module = "des"
+    },
+    var.tags
+  )
+  #depends_on = [module.keyvault]
+}
+
+
 # ── AKS Module ─────────────────────────────────────────────────────────────────
 # depends_on is explicit: ESO Managed Identity RBAC (added in a later step)
 # will be assigned against the KV, so AKS must wait for the KV to be ready.
@@ -94,9 +114,9 @@ module "aks" {
     {
       module = "aks"
     },
-    var.tags   
+    var.tags
   )
-
+  disk_encryption_set_id = module.des.disk_encryption_set_id
   apiserver_subnet_id  = module.vnet.subnet_ids["aks_apiserver"]
   system_subnet_id     = module.vnet.subnet_ids["aks_system"]
   user_subnet_id       = module.vnet.subnet_ids["aks_user"]
@@ -106,5 +126,5 @@ module "aks" {
   admin_username       = var.admin_username
   ssh_rsa_public_key   = var.ssh_rsa_public_key
 
-  depends_on = [module.keyvault, module.vnet]
+  #depends_on = [module.keyvault, module.vnet, module.des]
 }

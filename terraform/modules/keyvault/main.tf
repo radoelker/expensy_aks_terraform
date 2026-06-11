@@ -7,12 +7,14 @@ resource "azurerm_key_vault" "main" {
   resource_group_name = var.resource_group_name
   tenant_id           = data.azurerm_client_config.current.tenant_id
   sku_name            = "standard"
+  enabled_for_disk_encryption = true
   tags = var.tags
 
-  #enable_rbac_authorization     = true   # IAM roles instead of legacy access policies -  deprecated
-  rbac_authorization_enabled   = true   # Starting with version v5.0 of the provider
+  #enable_rbac_authorization     = true  # IAM roles instead of legacy access policies -  deprecated
+  rbac_authorization_enabled   = true    # Starting with version v5.0 of the provider
   soft_delete_retention_days    = 7      # 7 is the minimum; raise to 90 for production
-  purge_protection_enabled      = false  # Must stay false in dev/course environments.
+  purge_protection_enabled      = true   # hard requirement by Azure for DES
+                                         # Must stay false in dev/course environments.
                                          # Once set to true it cannot be unset — the vault
                                          # becomes locked for the full retention period and
                                          # blocks redeployment under the same name.

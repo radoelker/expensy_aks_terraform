@@ -28,4 +28,12 @@ jobs:
       with:
         directory: terraform/
         framework: terraform
+        output_format: sarif       # Generiert das SARIF-Format
+        output_file_path: results.sarif
         soft_fail: true
+        # Ignoriert alle Regeln, die als LOW eingestuft sind, vollständig
+        skip_check: LOW 
+          
+        # Die Pipeline bricht NUR bei MEDIUM, HIGH oder CRITICAL ab. 
+        # LOW-Fehler werden ignoriert und führen nicht zu einem Pipeline-Stopp.
+        ### hard_fail_on: CRITICAL

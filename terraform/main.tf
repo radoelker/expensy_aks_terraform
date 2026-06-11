@@ -106,5 +106,5 @@ module "aks" {
   admin_username       = var.admin_username
   ssh_rsa_public_key   = var.ssh_rsa_public_key
 
-  depends_on = [module.keyvault]
+  depends_on = [module.keyvault, module.vnet]
 }

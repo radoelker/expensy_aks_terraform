@@ -34,8 +34,8 @@ jobs:
         # Ignoriert alle Regeln, die als LOW eingestuft sind, vollständig, funktioniert nur in kauf-version
         # skip_check: LOW 
 
-        # this should check only MEDIUM and higher
-        check: MEDIUM
+        # this should check only MEDIUM and higher - did not work properly
+        # check: MEDIUM
           
         # Die Pipeline bricht NUR bei MEDIUM, HIGH oder CRITICAL ab. 
         # LOW-Fehler werden ignoriert und führen nicht zu einem Pipeline-Stopp.

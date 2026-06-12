@@ -117,14 +117,14 @@ module "aks" {
     var.tags
   )
   disk_encryption_set_id = module.des.disk_encryption_set_id
-  apiserver_subnet_id  = module.vnet.subnet_ids["aks_apiserver"]
-  system_subnet_id     = module.vnet.subnet_ids["aks_system"]
-  user_subnet_id       = module.vnet.subnet_ids["aks_user"]
-  location             = var.location
-  resource_group_name  = azurerm_resource_group.cluster.name
-  managed_cluster_name = var.managed_cluster_name
-  admin_username       = var.admin_username
-  ssh_rsa_public_key   = var.ssh_rsa_public_key
+  apiserver_subnet_id    = module.vnet.subnet_ids["aks_apiserver"]
+  system_subnet_id       = module.vnet.subnet_ids["aks_system"]
+  user_subnet_id         = module.vnet.subnet_ids["aks_user"]
+  location               = var.location
+  resource_group_name    = azurerm_resource_group.cluster.name
+  managed_cluster_name   = var.managed_cluster_name
+  admin_username         = var.admin_username
+  ssh_rsa_public_key     = var.ssh_rsa_public_key
 
   #depends_on = [module.keyvault, module.vnet, module.des]
 }

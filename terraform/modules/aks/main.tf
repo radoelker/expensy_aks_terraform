@@ -36,6 +36,7 @@ resource "azurerm_role_assignment" "user_subnet_network_contributor" {
 #checkov:skip=CKV_AZURE_6:API server access is restricted via VNet Integration and subnet delegation instead of IP ranges
 #checkov:done=CKV_AZURE_117: Ensure that AKS uses disk encryption set
 #checkov:done=CKV_AZURE_227: Enable_host_encryption for node pools
+#checkov:skip=CKV_AZURE_4: Observability handled by Prometheus/Loki/Grafana stack, Azure Monitor OMS agent not required
 
 resource "azurerm_kubernetes_cluster" "main" {
   name                = var.managed_cluster_name
@@ -70,22 +71,30 @@ resource "azurerm_kubernetes_cluster" "main" {
     azurerm_role_assignment.system_subnet_network_contributor,
     azurerm_role_assignment.user_subnet_network_contributor
   ]
+  # ── Background poller, that syncs secret changes from KeyVault into the cluster  ───────
+  # [CKV_AZURE_172] — key_vault_secrets_provider
+  key_vault_secrets_provider {
+    secret_rotation_enabled  = true
+    secret_rotation_interval = "2m" # Example: poll every 2 minutes
+  }
 
   # ── System node pool (fixed VMs — never spot) ───────────────────────────────
-  # Runs kube-system, ArgoCD, ingress, monitoring. Must not be evictable.
+  # Runs kube-system only (CoreDNS etc.) Must not be evictable.
   default_node_pool {
     name                 = "systempool"
     vnet_subnet_id       = var.system_subnet_id  
-    vm_size              = "Standard_D4pds_v6"   # ARM64 Ampere Altra
+    vm_size              = "Standard_D2pds_v6"   # ARM64 Ampere Altra
     #[CKV_AZURE_227] prerequisites:
-    #  az vm list-skus --location westus3 --query "[?name=='Standard_D4pds_v6'].capabilities" -o table
+    #  az vm list-skus --location westus3 --query "[?name=='Standard_D2pds_v6'].capabilities" -o table
     #  az feature show --namespace Microsoft.Compute --name EncryptionAtHost
     #  az feature register --namespace Microsoft.Compute --name EncryptionAtHost
     #  enable_host_encryption renamed to host_encryption_enabled in v4.x
     host_encryption_enabled  = true
+    #[CKV_AZURE_232] - only_critical_addons_enabled - Immutable After Creation
+    only_critical_addons_enabled = true 
     node_count           = 2
     min_count            = 2
-    max_count            = 5
+    max_count            = 3
     auto_scaling_enabled = true
     os_disk_size_gb      = 150
     os_disk_type         = "Ephemeral"
@@ -187,8 +196,37 @@ resource "azurerm_kubernetes_cluster" "main" {
   image_cleaner_interval_hours = 168   # weekly
 }
 
+# ── Infrastucture node pool (fixed VMs — never spot) ───────────────────────────────
+#Runs Prometheus, Loki, Grafana, ArgoCD.  Must not be evictable.
+resource "azurerm_kubernetes_cluster_node_pool" "infra" {
+  name                  = "infrapool"
+  kubernetes_cluster_id = azurerm_kubernetes_cluster.main.id
+  vnet_subnet_id        = var.user_subnet_id 
+  vm_size               = "Standard_D4pds_v6"
+  #[CKV_AZURE_227] prerequisites:
+  #  az vm list-skus --location westus3 --query "[?name=='Standard_D4pds_v6'].capabilities" -o table
+  #  az feature show --namespace Microsoft.Compute --name EncryptionAtHost
+  #  az feature register --namespace Microsoft.Compute --name EncryptionAtHost
+  #  enable_host_encryption renamed to host_encryption_enabled in v4.x of the AzureRM provider
+  host_encryption_enabled  = true
+  node_count            = 2
+  min_count             = 2
+  max_count             = 4
+  auto_scaling_enabled  = true
+  os_disk_size_gb       = 150
+  os_disk_type          = "Ephemeral"
+  max_pods              = 110
+  zones                 = ["1", "2", "3"]
+  mode                  = "User"
+  orchestrator_version  = "1.34.8"
+  os_type               = "Linux"
+  os_sku                = "Ubuntu"
+  node_public_ip_enabled = false
+
+}
+
 # ── User node pool ────────────────────────────────────────────────────────────
-# Purpose  : application workloads (frontend, backend) + ARC CI runners
+# Purpose  : application workloads (frontend, backend)
 # Regular  : on-demand VMs — subscription LowPriorityCores quota is 3, not
 #            enough for one D4pds_v5 spot node (4 vCPU). To switch to spot,
 #            uncomment priority + eviction_policy + spot_max_price and request

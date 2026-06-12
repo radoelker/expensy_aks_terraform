@@ -11,17 +11,58 @@ maintenance windows, OIDC/workload identity, KV secrets CSI driver).
 ├── providers.tf              # Provider versions + feature flags
 ├── backend.tf                # Partial backend config (filled via backend.conf)
 ├── backend.conf.example      # Template — copy to backend.conf (git-ignored)
-├── main.tf                   # Root module: RGs + calls keyvault + aks modules
+├── main.tf                   # Root module: RGs + calls all child modules
 ├── variables.tf              # All input variables with descriptions & defaults
 ├── outputs.tf                # Post-deploy outputs (cluster name, OIDC URL, etc.)
 ├── terraform.tfvars.example  # Copy to terraform.tfvars (git-ignored) and fill in
 ├── .gitignore                # Excludes tfvars, backend.conf, state files
 ├── modules/
-│   ├── keyvault/             # Key Vault + RBAC + secrets (mirrors keyvault.bicep)
-│   └── aks/                  # AKS cluster + node pools   (mirrors aks.bicep)
+│   ├── keyvault/             # Key Vault + RBAC + secrets
+│   ├── vnet/                 # VNet + 3 subnets (system, user, apiserver)
+│   ├── des/                  # Disk Encryption Set + KV key rotation
+│   └── aks/                  # AKS cluster + 3 node pools (system, infra, user)
 └── scripts/
     └── bootstrap-state.sh    # One-time: creates storage account for remote state
 ```
+
+## Network topology
+
+The vnet module creates a single VNet (`10.1.0.0/16`) with three dedicated subnets:
+
+| Subnet | CIDR | Purpose | Delegation |
+|--------|------|---------|------------|
+| `snet-aks-system` | `10.1.0.0/28` | System node pool (CoreDNS, kube-system) | None |
+| `snet-aks-user` | `10.1.1.0/28` | User workload + infra node pools | None |
+| `snet-aks-apiserver` | `10.1.2.0/28` | API Server VNet Integration | Microsoft.ContainerService/managedClusters |
+
+**Pod networking:** Azure CNI Overlay mode with pod CIDR `10.244.0.0/16` (independent of node subnet CIDR).
+
+**API Server access:** Restricted via VNet Integration + subnet delegation. No public IP ranges or NSGs required.
+
+## Node pools
+
+AKS cluster includes three node pools:
+
+1. **systempool** (`systempool`)
+   - VM: `Standard_D2pds_v6` (ARM64, 2 cores, 8 GB RAM)
+   - Nodes: 2–3 (auto-scale)
+   - Taint: `kubernetes.azure.com/scalesetpriority=systempool:NoSchedule`
+   - Purpose: Kubernetes system components (CoreDNS, kube-proxy, CSI drivers)
+   - Storage: 150 GB ephemeral OS disk, host encryption enabled
+
+2. **infrapool** (`infrapool`)
+   - VM: `Standard_D4pds_v6` (ARM64, 4 cores, 16 GB RAM)
+   - Nodes: 2–4 (auto-scale)
+   - Purpose: Observability stack (Prometheus, Loki, Grafana, ArgoCD)
+   - Storage: 150 GB ephemeral OS disk, host encryption enabled
+
+3. **userpool** (`userpool`)
+   - VM: `Standard_D4pds_v6`
+   - Nodes: 1+ (auto-scale)
+   - Purpose: Application workloads (frontend, backend, etc.)
+   - Storage: 150 GB ephemeral OS disk, host encryption enabled
+
+**Scaling:** All pools auto-scale based on demand (configured via `auto_scaler_profile`).
 
 ## First-time setup
 
@@ -84,15 +125,31 @@ terraform output kube_config_command | bash
 - Pass `deployer_object_id` as a pipeline secret variable.
 - Uncomment `use_oidc = true` in `backend.conf`.
 
-## Key differences from Bicep
+## Security & compliance
 
-| Bicep                          | Terraform                                              |
-|-------------------------------|--------------------------------------------------------|
-| `targetScope = 'subscription'` | Root module creates RGs directly                       |
-| `kv.getSecret()`              | Sensitive variable passed through; also stored in KV  |
-| `dependsOn` (explicit)         | `depends_on = [module.keyvault]` in root module        |
-| Two `maintenanceConfigurations` | `maintenance_window_auto_upgrade` + `_node_os` blocks  |
-| BCP139 / BCP180 compile errors | No equivalent; module boundaries are straightforward   |
+### Disk encryption
+
+All node OS disks are encrypted using a **Disk Encryption Set (DES)** with a customer-managed RSA-4096 key:
+
+- Key stored in Key Vault with automatic rotation (expires P365D, notified P29D before expiry)
+- DES identity granted `Get`, `WrapKey`, `UnwrapKey` permissions on the KV key
+- All VM disks encrypted with this key at rest
+
+### Checkov security considerations
+
+| Check ID | Status | Rationale |
+|----------|--------|-----------|
+| **CKV_AZURE_6** | Skipped | API server access restricted via VNet Integration + subnet delegation (not IP ranges). Aligns with least-privilege networking. |
+| **CKV_AZURE_4** | Skipped | Observability provided by Prometheus/Loki/Grafana stack; Azure Monitor OMS agent not required for this architecture. |
+| **CKV_AZURE_117** | Passed | Disk encryption enabled via separate DES module with KV-managed key rotation. |
+| **CKV_AZURE_227** | Passed | Host encryption enabled on all node pools (`host_encryption_enabled = true`). |
+| **CKV_AZURE_189** | Skipped | Key Vault public access enabled temporarily during initial deployment; restricted post-deployment via network rules. |
+
+### Identity & RBAC
+
+- **AKS identity:** User-Assigned Managed Identity attached to cluster; granted Network Contributor on all subnets pre-deployment
+- **Workload identity:** OIDC issuer enabled for pod-to-Azure auth (Workload Identity Federation)
+- **Key Vault access:** Deployer gets Secrets Officer role; DES gets key permissions only
 
 ## Teardown
 
@@ -149,101 +206,5 @@ az storage blob download \
   --file ./terraform.tfstate.backup \
   --account-name akstfstate37ec108a \
   --auth-mode login
-```
-
-### LOG
-
-```
-terraform init -backend-config=backend.conf
-Initializing modules...
-- aks in modules/aks
-- keyvault in modules/keyvault
-Initializing provider plugins found in the configuration...
-- Finding hashicorp/azurerm versions matching "~> 4.0"...
-- Installing hashicorp/azurerm v4.74.0...
-- Installed hashicorp/azurerm v4.74.0 (signed by HashiCorp)
-
-Initializing the backend...
-
-Successfully configured the backend "azurerm"! Terraform will automatically
-use this backend unless the backend configuration changes.
-
-Initializing provider plugins found in the state...
-
-Terraform has created a lock file .terraform.lock.hcl to record the provider
-selections it made above. Include this file in your version control repository
-so that Terraform can guarantee to make the same selections by default when
-you run "terraform init" in the future.
-
-Terraform has been successfully initialized!
-
-You may now begin working with Terraform. Try running "terraform plan" to see
-any changes that are required for your infrastructure. All Terraform commands
-should now work.
-
-If you ever set or change modules or backend configuration for Terraform,
-rerun this command to reinitialize your working directory. If you forget, other
-commands will detect it and remind you to do so if necessary.
-```
-
-Errors:
-
-```
-│ Warning: Argument is deprecated
-│
-│   with module.keyvault.azurerm_key_vault.main,
-│   on modules/keyvault/main.tf line 11, in resource "azurerm_key_vault" "main":
-│   11:   enable_rbac_authorization     = true   # IAM roles instead of legacy access policies
-│
-│ This property has been renamed to `rbac_authorization_enabled` and will be removed in v5.0 of the provider
-╵
-╷
-│ Error: Unsupported argument
-│
-│   on modules/aks/main.tf line 34, in resource "azurerm_kubernetes_cluster" "main":
-│   34:       max_unavailable = "0"
-│
-│ An argument named "max_unavailable" is not expected here. <== either max_surge or max_unavailable
-╵
-╷
-│ Error: Unsupported argument
-│
-│   on modules/aks/main.tf line 67, in resource "azurerm_kubernetes_cluster" "main":
-│   67:   automatic_channel_upgrade = "patch"
-│
-│ An argument named "automatic_channel_upgrade" is not expected here. <== change in provider 4.x
-|   => now automatic_upgrade_channel
-╵
-╷
-│ Error: Unsupported argument
-│
-│   on modules/aks/main.tf line 68, in resource "azurerm_kubernetes_cluster" "main":
-│   68:   node_os_channel_upgrade   = "NodeImage"
-│
-│ An argument named "node_os_channel_upgrade" is not expected here.
-|  => node_os_channel_upgrade property has been renamed to node_os_upgrade_channel 
-```
-
-Finally it worked:
-
-```
-Releasing state lock. This may take a few moments...
-
-Apply complete! Resources: 8 added, 0 changed, 0 destroyed.
-
-Outputs:
-
-cluster_fqdn = "aks-prod-tf-rainer-dns-xpz13wjl.hcp.eastus.azmk8s.io"
-cluster_name = "aks-prod-tf-rainer"
-control_plane_managed_identity_principal_id = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-kubelet_identity_client_id = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-kubelet_identity_object_id = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-kubernetes_version = "1.34.7"
-kv_name = "kv-aks-prod-tf-ra-001"
-kv_resource_id = "/subscriptions/<subscritionID>/resourceGroups/aks-tf-rainer-rg-kv/providers/Microsoft.KeyVault/vaults/kv-aks-prod-tf-ra-001"
-kv_uri = "https://kv-aks-prod-tf-ra-001.vault.azure.net/"
-node_resource_group = "MC_aks-tf-rainer-rg_aks-prod-tf-rainer_eastus"
-oidc_issuer_url = "https://eastus.oic.prod-aks.azure.com/<userID>/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx/"
-resource_group_id = "/subscriptions/<subscritionID>/resourceGroups/aks-tf-rainer-rg"
 ```
 

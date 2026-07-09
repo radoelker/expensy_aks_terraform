@@ -90,6 +90,7 @@ module "vnet" {
 module "des" {
   source              = "./modules/des"
   key_vault_id        = data.azurerm_key_vault.existing.id
+  key_vault_name      = data.azurerm_key_vault.existing.name
   resource_group_name = var.resource_group_name
   location            = var.location
   tags = merge(
@@ -127,4 +128,5 @@ module "aks" {
   ssh_rsa_public_key     = var.ssh_rsa_public_key
 
   #depends_on = [module.keyvault, module.vnet, module.des]
+  depends_on = [module.des]
 }

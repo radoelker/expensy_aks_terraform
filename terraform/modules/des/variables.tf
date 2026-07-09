@@ -3,6 +3,11 @@ variable "key_vault_id" {
   type        = string
 }
 
+variable "key_vault_name" {
+  description = "Resource ID of the existing Key Vault where the key will be created."
+  type        = string
+}
+
 variable "key_name" {
   description = "Name of the Key Vault key used for disk encryption."
   type        = string

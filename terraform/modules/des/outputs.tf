@@ -1,6 +1,8 @@
 output "disk_encryption_set_id" {
   description = "Resource ID of the Disk Encryption Set — pass to AKS as disk_encryption_set_id."
   value       = azurerm_disk_encryption_set.aks.id
+  # artificially wait 30 sec to propagate
+  # depends_on  = [time_sleep.wait_for_policy_propagation]
 }
 
 output "disk_encryption_set_name" {

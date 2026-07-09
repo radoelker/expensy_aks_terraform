@@ -22,7 +22,7 @@ resource "azurerm_key_vault" "main" {
                                          # Set to true only for long-lived production vaults.
   public_network_access_enabled = true   # CKV_AZURE_189: Lock down to a private endpoint in hardened envs
   network_acls {
-    default_action             = "Deny"          # CKV_AZURE_109
+    default_action             = "Allow"          # CKV_AZURE_109, bootstrapping — fully open, tighten later
     bypass                     = "AzureServices" # let Azure internal services through
     ip_rules       = ["62.158.33.194/32"]      # just your own IP for now
     #virtual_network_subnet_ids = [               # allow your AKS subnets, not during bootstrapping
@@ -38,6 +38,14 @@ resource "azurerm_key_vault" "main" {
 resource "azurerm_role_assignment" "deployer" {
   scope                = azurerm_key_vault.main.id
   role_definition_name = "Key Vault Secrets Officer"
+  principal_id         = var.deployer_object_id
+  principal_type       = var.deployer_principal_type
+}
+
+# Secrets Officer = create/read/update/delete keys (not secrets or certs)
+resource "azurerm_role_assignment" "deployer_crypto" {
+  scope                = azurerm_key_vault.main.id
+  role_definition_name = "Key Vault Crypto Officer"
   principal_id         = var.deployer_object_id
   principal_type       = var.deployer_principal_type
 }

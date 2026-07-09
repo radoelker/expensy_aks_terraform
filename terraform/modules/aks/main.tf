@@ -96,7 +96,7 @@ resource "azurerm_kubernetes_cluster" "main" {
     min_count            = 2
     max_count            = 3
     auto_scaling_enabled = true
-    os_disk_size_gb      = 150
+    os_disk_size_gb      = 70  # Standard_D2pds_v6 (cache: 75GB)
     os_disk_type         = "Ephemeral"
     max_pods             = 110
     type                 = "VirtualMachineScaleSets"
@@ -213,7 +213,7 @@ resource "azurerm_kubernetes_cluster_node_pool" "infra" {
   min_count             = 2
   max_count             = 4
   auto_scaling_enabled  = true
-  os_disk_size_gb       = 150
+  os_disk_size_gb       = 128    # leave headroom below 150GB limit
   os_disk_type          = "Ephemeral"
   max_pods              = 110
   zones                 = ["1", "2", "3"]
@@ -249,9 +249,9 @@ resource "azurerm_kubernetes_cluster_node_pool" "user" {
   host_encryption_enabled  = true
   node_count            = 1
   min_count             = 1
-  max_count             = 10
+  max_count             = 8
   auto_scaling_enabled  = true
-  os_disk_size_gb       = 150
+  os_disk_size_gb       = 128    # leave headroom below 150GB limit
   os_disk_type          = "Ephemeral"
   max_pods              = 110
   zones                 = ["1", "2", "3"]
